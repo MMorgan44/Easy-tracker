@@ -868,16 +868,22 @@ def data_entry_tab():
     
     # Dates
     with st.expander("📅 Dates", expanded=True):
+        # Initialize date offset in session state
+        if 'date_offset' not in st.session_state:
+            st.session_state.date_offset = 0
+        
+        base_date = datetime.date.today() + timedelta(days=st.session_state.date_offset)
+        
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            audit_date = st.date_input("📅 Audit Date", value=datetime.date.today(), key="audit_date")
+            audit_date = st.date_input("📅 Audit Date", value=base_date, key=f"audit_date_{st.session_state.date_offset}")
         with col2:
-            service_date = st.date_input("📅 Service Date", value=datetime.date.today(), key="service_date")
+            service_date = st.date_input("📅 Service Date", value=base_date, key=f"service_date_{st.session_state.date_offset}")
         with col3:
-            invoice_date = st.date_input("📅 Invoice Date", value=datetime.date.today(), key="invoice_date")
+            invoice_date = st.date_input("📅 Invoice Date", value=base_date, key=f"invoice_date_{st.session_state.date_offset}")
         with col4:
-            approval_date = st.date_input("📅 Approval Date", value=datetime.date.today(), key="approval_date")
+            approval_date = st.date_input("📅 Approval Date", value=base_date, key=f"approval_date_{st.session_state.date_offset}")
     
     # Services
     with st.expander("🦷 Services", expanded=True):
@@ -885,12 +891,20 @@ def data_entry_tab():
         
         with col1:
             st.markdown("**Charged Services (Invoice)**")
+            
+            # Initialize session state for services if not exists
+            if 'charged_services_value' not in st.session_state:
+                st.session_state.charged_services_value = ""
+            
             charged_services = st.text_area(
                 "Enter services (one per line)",
+                value=st.session_state.charged_services_value,
                 height=150,
                 key="charged_services",
                 help="Format: CODE: Description (Count: N) [Teeth: X,Y,Z]"
             )
+            # Update the value holder when text area changes
+            st.session_state.charged_services_value = charged_services
             
             # Quick add dental code
             st.markdown("**Quick Add Code:**")
@@ -904,21 +918,29 @@ def data_entry_tab():
                     if selected_code:
                         desc = DENTAL_CODES.get(selected_code, {}).get('description', '')
                         new_line = f"{selected_code}: {desc} (Count: {code_count})"
-                        current = st.session_state.get('charged_services', '')
-                        st.session_state.charged_services = f"{current}\n{new_line}".strip()
+                        current = st.session_state.charged_services_value
+                        st.session_state.charged_services_value = f"{current}\n{new_line}".strip() if current else new_line
                         st.rerun()
         
         with col2:
             st.markdown("**Approved Services**")
+            
+            # Initialize session state for approved services if not exists
+            if 'approved_services_value' not in st.session_state:
+                st.session_state.approved_services_value = ""
+            
             approved_services = st.text_area(
                 "Enter approved services",
+                value=st.session_state.approved_services_value,
                 height=150,
                 key="approved_services"
             )
+            # Update the value holder when text area changes
+            st.session_state.approved_services_value = approved_services
             
             # Copy from charged
             if st.button("📋 Copy from Charged", key="copy_charged"):
-                st.session_state.approved_services = st.session_state.get('charged_services', '')
+                st.session_state.approved_services_value = st.session_state.charged_services_value
                 st.rerun()
     
     # Clinical Notes
@@ -964,11 +986,8 @@ def data_entry_tab():
     
     with col3:
         if st.button("➡️ Next Day", use_container_width=True):
-            # Increment all dates by one day
-            st.session_state.audit_date = st.session_state.audit_date + timedelta(days=1)
-            st.session_state.service_date = st.session_state.service_date + timedelta(days=1)
-            st.session_state.invoice_date = st.session_state.invoice_date + timedelta(days=1)
-            st.session_state.approval_date = st.session_state.approval_date + timedelta(days=1)
+            # Increment date offset
+            st.session_state.date_offset = st.session_state.get('date_offset', 0) + 1
             st.rerun()
     
     with col4:
@@ -987,22 +1006,36 @@ def save_current_record():
         st.error("❌ MRN is required")
         return
     
+    # Get date offset for dynamic keys
+    date_offset = st.session_state.get('date_offset', 0)
+    
+    # Get dates from dynamic keys
+    audit_date_key = f"audit_date_{date_offset}"
+    service_date_key = f"service_date_{date_offset}"
+    invoice_date_key = f"invoice_date_{date_offset}"
+    approval_date_key = f"approval_date_{date_offset}"
+    
+    audit_date_val = st.session_state.get(audit_date_key, datetime.date.today())
+    service_date_val = st.session_state.get(service_date_key, datetime.date.today())
+    invoice_date_val = st.session_state.get(invoice_date_key, datetime.date.today())
+    approval_date_val = st.session_state.get(approval_date_key, datetime.date.today())
+    
     record = {
-        "Hospital": st.session_state.hospital_select,
-        "Doctor": st.session_state.doctor_select,
-        "Patient": st.session_state.patient_input,
-        "MRN": st.session_state.mrn_input,
-        "Insurance": st.session_state.insurance_select,
-        "Audit Date": st.session_state.audit_date.strftime("%d/%m/%Y"),
-        "Service Date": st.session_state.service_date.strftime("%d/%m/%Y"),
-        "Invoice Date": st.session_state.invoice_date.strftime("%d/%m/%Y"),
-        "Approval Date": st.session_state.approval_date.strftime("%d/%m/%Y"),
-        "Charged Services": st.session_state.charged_services,
-        "Approved Services": st.session_state.approved_services,
-        "Attending Note": st.session_state.attending_note,
-        "The services performed": st.session_state.service_performed,
-        "Approved": st.session_state.approved,
-        "Discrepancy": st.session_state.has_discrepancy,
+        "Hospital": st.session_state.get('hospital_select', ''),
+        "Doctor": st.session_state.get('doctor_select', ''),
+        "Patient": st.session_state.get('patient_input', ''),
+        "MRN": st.session_state.get('mrn_input', ''),
+        "Insurance": st.session_state.get('insurance_select', ''),
+        "Audit Date": audit_date_val.strftime("%d/%m/%Y") if audit_date_val else "",
+        "Service Date": service_date_val.strftime("%d/%m/%Y") if service_date_val else "",
+        "Invoice Date": invoice_date_val.strftime("%d/%m/%Y") if invoice_date_val else "",
+        "Approval Date": approval_date_val.strftime("%d/%m/%Y") if approval_date_val else "",
+        "Charged Services": st.session_state.get('charged_services_value', ''),
+        "Approved Services": st.session_state.get('approved_services_value', ''),
+        "Attending Note": st.session_state.get('attending_note', ''),
+        "The services performed": st.session_state.get('service_performed', ''),
+        "Approved": st.session_state.get('approved', ''),
+        "Discrepancy": st.session_state.get('has_discrepancy', 'No'),
         "Discrepancy Details": st.session_state.get('discrepancy_details', ''),
         "Created By": st.session_state.current_user['excel_export_name'],
         "Created Date": dt.now().strftime("%d/%m/%Y %H:%M")
@@ -1027,17 +1060,10 @@ def save_current_record():
 
 def reset_form():
     """Reset form fields"""
-    keys_to_reset = [
-        'hospital_select', 'doctor_select', 'patient_input', 'mrn_input',
-        'insurance_select', 'charged_services', 'approved_services',
-        'attending_note', 'discrepancy_details'
-    ]
-    for key in keys_to_reset:
-        if key in st.session_state:
-            if key.endswith('_select'):
-                st.session_state[key] = ""
-            else:
-                st.session_state[key] = ""
+    # Reset value holders (not widget keys)
+    st.session_state.charged_services_value = ""
+    st.session_state.approved_services_value = ""
+    st.session_state.editing_record = None
 
 # ==================== SAVED RECORDS TAB ====================
 def saved_records_tab():
@@ -1189,17 +1215,17 @@ def edit_record(index: int):
     record = st.session_state.records[index]
     st.session_state.editing_record = index
     
-    # Populate form fields
-    st.session_state.hospital_select = record.get('Hospital', '')
-    st.session_state.doctor_select = record.get('Doctor', '')
-    st.session_state.patient_input = record.get('Patient', '')
-    st.session_state.mrn_input = record.get('MRN', '')
-    st.session_state.insurance_select = record.get('Insurance', '')
-    st.session_state.charged_services = record.get('Charged Services', '')
-    st.session_state.approved_services = record.get('Approved Services', '')
-    st.session_state.attending_note = record.get('Attending Note', '')
-    st.session_state.has_discrepancy = record.get('Discrepancy', 'No')
-    st.session_state.discrepancy_details = record.get('Discrepancy Details', '')
+    # Populate value holders (these will be used as default values)
+    st.session_state.edit_hospital = record.get('Hospital', '')
+    st.session_state.edit_doctor = record.get('Doctor', '')
+    st.session_state.edit_patient = record.get('Patient', '')
+    st.session_state.edit_mrn = record.get('MRN', '')
+    st.session_state.edit_insurance = record.get('Insurance', '')
+    st.session_state.charged_services_value = record.get('Charged Services', '')
+    st.session_state.approved_services_value = record.get('Approved Services', '')
+    st.session_state.edit_attending_note = record.get('Attending Note', '')
+    st.session_state.edit_discrepancy = record.get('Discrepancy', 'No')
+    st.session_state.edit_discrepancy_details = record.get('Discrepancy Details', '')
     
     st.info("📝 Record loaded for editing. Go to Data Entry tab to modify.")
     st.rerun()
